@@ -1,13 +1,17 @@
 from django.http import Http404
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from .models import User
 from .serializers import UserSerializer
 
 class UserList(APIView):
+    
+    permission_classes = [AllowAny]
+    
     def get(self, request):
         """
         Get a list of all users in the database
@@ -34,18 +38,62 @@ class UserList(APIView):
         
 class UserDetail(APIView):
     """
-    See the details of a single user
+    Single User
     """
+    permission_classes = [permissions.IsAuthenticated]
+    
     def get_object(self, pk):
+        """
+        Define the User
+        """
         try:
             return User.objects.get(pk=pk)
         except User.DoesNotExist:
             raise Http404
     
     def get(self, request, pk):
+        """
+        Get the User Details
+        """
         user = self.get_object(pk)
+        if request.user != user:
+            return Response(
+                {'detail': "You don't have permission to view this account."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         serializer = UserSerializer(user)
         return Response(serializer.data)
+    
+    def put(self, request, pk):
+        """
+        Update User Details
+        """
+        user = self.get_object(pk)
+        if request.user != user:
+            return Response(
+                {'detail': "You don't have permission to edit this account."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        serializer = UserSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+        
+    def delete(self, request, pk):
+        user = self.get_object(pk)
+        
+        if request.user != user:
+            return Response(
+                {'detail': "You don't have permission to delete this account."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
     
 class CustomAuthToken(ObtainAuthToken):
     """
