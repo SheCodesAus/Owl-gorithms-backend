@@ -113,3 +113,18 @@ class CustomAuthToken(ObtainAuthToken):
             'user_id': user.id,
             'email': user.email
         })
+        
+class CurrentUser(APIView):
+    """
+    This is spefically used to get current logged-in user info based on Token
+    Custom endpoint users/me for easy front end connection (no PK)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        serializer = UserSerializer(user)
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+                        )
