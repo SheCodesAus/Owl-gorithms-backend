@@ -19,10 +19,16 @@ class List(models.Model):
     has_deadline = models.BooleanField(default=False)
     deadline = models.DateTimeField(null=True, blank=True)
     
-    user = models.ForeignKey(
+    owner = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='lists'
+        related_name='owned_lists'
+    )
+    
+    contributor = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='contributor_lists'
     )
     
     def __str__(self):
