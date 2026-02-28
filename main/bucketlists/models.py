@@ -51,6 +51,9 @@ class BucketList(models.Model):
             self.deadline = None
                 
 class BucketListMember(models.Model):
+    """
+    Connect members to a bucketlist
+    """
     CONTRIBUTOR = "contributor"
     VIEWER = "viewer"
     
@@ -84,6 +87,9 @@ class BucketListMember(models.Model):
     
 
 class BucketItem(models.Model):
+    """
+    Entries on a bucketlist
+    """
     bucket_list = models.ForeignKey(
         BucketList,
         on_delete=models.CASCADE,
