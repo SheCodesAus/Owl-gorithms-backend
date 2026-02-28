@@ -13,8 +13,7 @@ class BucketListMemberSerializer(serializers.ModelSerializer):
             "id",
             "user_id",
             "username",
-            "role",
-            "joined_at"
+            "joined_at",
         ]
 
 class BucketListSerializer(serializers.ModelSerializer):

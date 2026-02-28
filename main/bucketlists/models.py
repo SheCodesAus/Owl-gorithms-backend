@@ -39,16 +39,6 @@ class BucketList(models.Model):
     
     def __str__(self):
         return self.title
-    
-    def clean(self):
-        """
-        Optional housekeeping
-        Keeps data consistent
-        If has_deadline is False, deadline should be empty
-        Can add more
-        """
-        if not self.has_deadline:
-            self.deadline = None
                 
 class BucketListMember(models.Model):
     """
