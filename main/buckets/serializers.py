@@ -1,10 +1,10 @@
 from rest_framework import serializers
-from lists.models import List
+from buckets.models import Bucket
 
-class ListSerializer(serializers.ModelSerializer):
+class BucketSerializer(serializers.ModelSerializer):
     
     class Meta:
-        model = List
+        model = Bucket
         fields = '__all__'
         
     def update(self, instance, validated_data):

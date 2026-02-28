@@ -2,7 +2,7 @@ from django.db import models
 from users.models import User
 
 # Create your models here.
-class List(models.Model):
+class Bucket(models.Model):
     
     title = models.CharField(max_length=200)
     description = models.TextField()
@@ -22,13 +22,13 @@ class List(models.Model):
     owner = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='owned_lists'
+        related_name='owned_buckets'
     )
     
     contributor = models.ManyToManyField(
         User,
         blank=True,
-        related_name='contributor_lists'
+        related_name='contributor_buckets'
     )
     
     def __str__(self):
