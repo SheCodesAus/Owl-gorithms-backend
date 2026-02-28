@@ -3,7 +3,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.http import Http404
-from .models import Bucket
 from .serializers import BucketSerializer
 from users.models import User
 
