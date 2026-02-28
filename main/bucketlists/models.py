@@ -2,51 +2,53 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 
-# Create your models here.
 class BucketList(models.Model):
-        CATEGORY_CHOICES = [
-            ("one", "One"),
-            ("two", "Two"),
-            ("three", "Three"),
+    """
+    Model for main BucketList container
+    """
+    CATEGORY_CHOICES = [
+        ("one", "One"),
+        ("two", "Two"),
+        ("three", "Three"),
         ]
         
-        title = models.CharField(max_length=200)
-        description = models.TextField(blank=True)
-        image = models.URLField(null=True, blank=True)
-        date_created = models.DateTimeField(auto_now_add=True)
-        category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, blank=True, null=True)
-        
-        is_open = models.BooleanField(default=True)
-        is_public = models.BooleanField(default=False)
-        has_deadline = models.BooleanField(default=False)
-        deadline = models.DateTimeField(null=True, blank=True)
-        
-        owner = models.ForeignKey(
-            settings.AUTH_USER_MODEL, #Better than pointing directly to User model incase it changes in the future
-            on_delete=models.CASCADE,
-            related_name="owned_bucketlists",
-        )
-        
-        # Users who are part of this bucketlist (contributor/viewer)
-        members = models.ManyToManyField(
-            settings.AUTH_USER_MODEL,
-            through="BucketListMember",
-            related_name="bucketlists",
-            blank=True,
-        )
-        
-        def __str__(self):
-            return self.title
-        
-        def clean(self):
-            """
-            Optional housekeeping
-            Keeps data consistent
-            If has_deadline is False, deadline should be empty
-            Can add more
-            """
-            if not self.has_deadline:
-                self.deadline = None
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    image = models.URLField(null=True, blank=True)
+    date_created = models.DateTimeField(auto_now_add=True)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, blank=True, null=True)
+    
+    is_open = models.BooleanField(default=True)
+    is_public = models.BooleanField(default=False)
+    has_deadline = models.BooleanField(default=False)
+    deadline = models.DateTimeField(null=True, blank=True)
+    
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, #Better than pointing directly to User model incase it changes in the future
+        on_delete=models.CASCADE,
+        related_name="owned_bucketlists",
+    )
+    
+    # Users who are part of this bucketlist (contributor/viewer)
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through="BucketListMember",
+        related_name="bucketlists",
+        blank=True,
+    )
+    
+    def __str__(self):
+        return self.title
+    
+    def clean(self):
+        """
+        Optional housekeeping
+        Keeps data consistent
+        If has_deadline is False, deadline should be empty
+        Can add more
+        """
+        if not self.has_deadline:
+            self.deadline = None
                 
 class BucketListMember(models.Model):
     CONTRIBUTOR = "contributor"
