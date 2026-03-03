@@ -32,6 +32,7 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     'users.apps.UsersConfig',
+    'bucketlists.apps.BucketlistsConfig',
     'rest_framework',
     'rest_framework.authtoken',
     'django.contrib.admin',
