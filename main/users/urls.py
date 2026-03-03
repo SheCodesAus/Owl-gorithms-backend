@@ -5,4 +5,5 @@ urlpatterns = [
     path('users/', views.UserList.as_view()),
     path('users/<int:pk>/', views.UserDetail.as_view()),
     path('users/me', views.CurrentUser.as_view()),
+    path('api/auth/google/callback/', views.GoogleLoginCallback.as_view(), name='google-callback')
 ]
