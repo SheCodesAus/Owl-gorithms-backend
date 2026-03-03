@@ -126,6 +126,9 @@ class BucketItemList(APIView):
         )
         
 class BucketItemDetail(APIView):
+    """
+    Single item + update + delete
+    """
     permission_classes = [permissions.IsAuthenticated]
     
     def get_object(self, pk):
