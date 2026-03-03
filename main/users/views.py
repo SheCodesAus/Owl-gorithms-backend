@@ -1,12 +1,17 @@
 from django.http import Http404
+from django.shortcuts import redirect
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
-from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.authtoken.models import Token
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import get_user_model
 from .models import User
 from .serializers import UserSerializer
+import logging
+
+User = get_user_model()
+logger = logging.getLogger(__name__)
 
 class UserList(APIView):
     
@@ -22,15 +27,18 @@ class UserList(APIView):
     
     def post(self, request):
         """
-        Create a new user
+        Create a new user - returns JWT immediately after signup
         """
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
-            return Response(
-                serializer.data,
-                status=status.HTTP_201_CREATED
-            )
+            user = serializer.save()
+            # Generate JWT
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'user': serializer.data,
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }, status=status.HTTP_201_CREATED)
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
@@ -38,14 +46,11 @@ class UserList(APIView):
         
 class UserDetail(APIView):
     """
-    Single User
+    Single User views
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def get_object(self, pk):
-        """
-        Define the User
-        """
         try:
             return User.objects.get(pk=pk)
         except User.DoesNotExist:
@@ -94,25 +99,6 @@ class UserDetail(APIView):
         
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
-class CustomAuthToken(ObtainAuthToken):
-    """
-    Create a bearer token for user
-    """
-    def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(
-            data=request.data,
-            context={'request': request}
-        )
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data['user']
-        token, created = Token.objects.get_or_create(user=user)
-        
-        return Response({
-            'token': token.key,
-            'user_id': user.id,
-            'email': user.email
-        })
         
 class CurrentUser(APIView):
     """
@@ -128,3 +114,41 @@ class CurrentUser(APIView):
             serializer.data,
             status=status.HTTP_200_OK
                         )
+        
+class GoogleLoginCallback(APIView):
+    """
+    Handle Google OAuth Callback.
+    Returns JWT + user info as JSON
+    """
+    
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        # User should be authenticated by allauth at this point
+        user = request.user
+        
+        if not user.is_authenticated:
+            user_id = request.session.get('_auth_user_id')
+            if user_id:
+                try:
+                    user = User.objects.get(pk=user_id)
+                except User.DoesNotExist:
+                    pass
+                
+        if not user or not user.is_authenticated:
+            return redirect("/")
+        
+        try:
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+        except Exception as e:
+            logger.error(f"Token generation failed for user {user.email}: {e}")
+            return redirect("/")
+        
+        redirect_url = (
+            f"/"
+            f"access={access_token}&refresh={refresh_token}&login_success=true"
+        )
+        
+        return redirect(redirect_url)
