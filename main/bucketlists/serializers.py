@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import BucketList, BucketListMembership, BucketListItem, ItemVote
+from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite
 
 class BucketListMembershipSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source="user.email", read_only=True)
@@ -153,3 +153,51 @@ class ItemVoteSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at"
         ]
+        
+class BucketListInviteSerializer(serializers.ModelSerializer):
+    invite_url = serializers.SerializerMethodField()
+    is_expired = serializers.BooleanField(read_only=True)
+    is_valid = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = BucketListInvite
+        fields = [
+            "id",
+            "bucket_list",
+            "role",
+            "token",
+            "invite_url",
+            "expires_at",
+            "is_active",
+            "is_expired",
+            "is_valid",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "bucket_list",
+            "role",
+            "token",
+            "invite_url",
+            "expires_at",
+            "is_active",
+            "is_expired",
+            "is_valid",
+            "created_at",
+            "updated_at",
+        ]
+        
+        def get_invite_url(self, obj):
+            request = self.context.get("request")
+            if not request:
+                return None
+            return request.build_absolute_uri(f"/invites/{obj.token}/")
+    
+class InviteAcceptSerializer(serializers.Serializer):
+    accept = serializers.BooleanField()
+    
+    def validate_accept(self, value):
+        if value is not True:
+            raise serializers.ValidationError("You must accept the invite to join the list.")
+        return value

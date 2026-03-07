@@ -3,8 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 
-from .models import BucketList, BucketListMembership, BucketListItem, ItemVote
-from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer
+from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite
+from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer, BucketListInviteSerializer, InviteAcceptSerializer
 
 class BucketListList(APIView):
     """
@@ -362,3 +362,114 @@ class ItemVoteAction(APIView):
             
         vote.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    
+class BucketListInviteManage(APIView):
+    """
+    Get or Regenerate invite for a role
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_bucket_list(self, pk, user):
+        try:
+            return BucketList.objects.get(pk=pk, memberships__user=user)
+        except BucketList.DoesNotExist:
+            raise Http404
+        
+    def is_owner(self, bucket_list, user):
+        return bucket_list.owner == user
+    
+    def get_valid_role(self, role):
+        valid_roles = [
+            BucketListInvite.InviteRoleChoices.EDITOR,
+            BucketListInvite.InviteRoleChoices.VIEWER,
+        ]
+        if role not in valid_roles:
+            raise Http404
+        return role
+    
+    def get(self, request, bucket_list_id, role):
+        bucket_list = self.get_bucket_list(bucket_list_id, request.user)
+        role = self.get_valid_role(role)
+        
+        if not self.is_owner(bucket_list, request.user):
+            return Response(
+                {"detail": "Only the owner can view invite links."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        invite = BucketListInvite.objects.filter(
+            bucket_list=bucket_list,
+            role=role,
+        ).first()
+        
+        if not invite:
+            return Response(
+                {"detail": "No invite exists for this role yet."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        serializer = BucketListInviteSerializer(invite, context={"request": request})
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+        
+    def post(self, request, bucket_list_id, role):
+        bucket_list = self.get_bucket_list(bucket_list_id, request.user)
+        role = self.get_valid_role(role)
+        
+        if not self.is_owner(bucket_list, request.user):
+            return Response(
+                {"detail": "Only the owner can create invite links."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+            
+        invite, created = BucketListInvite.objects.get_or_create(
+            bucket_list=bucket_list,
+            role=role,
+        )
+        
+        if not created:
+            serializer = BucketListInviteSerializer(invite, context={"request": request})
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
+            
+        serializer = BucketListInviteSerializer(invite, context={"request": request})
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED
+        )
+        
+    def put(self, request, bucket_list_id, role):
+        bucket_list = self.get_bucket_list(bucket_list_id, request.user)
+        role = self.get_valid_role(role)
+        
+        if not self.is_owner(bucket_list, request.user):
+            return Response(
+                {"detail": "Only the owner can regenerate invite links."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        invite, _ = BucketListInvite.objects.get_or_create(
+            bucket_list=bucket_list,
+            role=role,
+        )
+        
+        invite.regenerate()
+        
+        serializer = BucketListInviteSerializer(invite, context={"request": request})
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+        
+class BucketListInviteDetail(APIView):
+    """
+    Preview invite by token
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    
