@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import BucketListList, BucketListDetail, BucketListItemListCreate, BucketListItemDetail
+from .views import BucketListList, BucketListDetail, BucketListItemListCreate, BucketListItemDetail, ItemVoteAction
 
 urlpatterns = [
     path("bucketlists/", BucketListList.as_view(), name="bucketlist-list"),
@@ -14,5 +14,10 @@ urlpatterns = [
         "items/<int:pk>/",
         BucketListItemDetail.as_view(),
         name="bucketlist-item-detail",
+    ),
+    path(
+        "items/<int:pk>/vote/",
+        ItemVoteAction.as_view(),
+        name="item-vote",
     ),
 ]

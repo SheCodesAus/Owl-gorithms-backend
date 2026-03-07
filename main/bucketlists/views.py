@@ -3,8 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 
-from .models import BucketList, BucketListMembership, BucketListItem
-from .serializers import BucketListSerializer, BucketListItemSerializer
+from .models import BucketList, BucketListMembership, BucketListItem, ItemVote
+from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer
 
 class BucketListList(APIView):
     """
@@ -267,4 +267,98 @@ class BucketListItemDetail(APIView):
             )
             
         item.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+class ItemVoteAction(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_item(self, pk, user):
+        try:
+            return BucketListItem.objects.get(
+                pk=pk,
+                bucket_list__memberships__user=user
+            )
+        except BucketListItem.DoesNotExist:
+            raise Http404
+        
+    def get_membership(self, bucket_list, user):
+        try:
+            return BucketListMembership.objects.get(
+                bucket_list=bucket_list,
+                user=user,
+            )
+        except BucketListMembership.DoesNotExist:
+            raise Http404
+        
+    def can_vote(self, bucket_list, membership):
+        if bucket_list.is_frozen:
+            return False
+        
+        if membership.role in [
+            BucketListMembership.RoleChoices.OWNER,
+            BucketListMembership.RoleChoices.EDITOR,
+        ]:
+            return True
+        
+        if (
+            membership.role == BucketListMembership.RoleChoices.VIEWER
+            and bucket_list.allow_viewer_voting
+        ):
+            return True
+        
+        return False
+    
+    def post(self, request, pk):
+        item = self.get_item(pk, request.user)
+        membership = self.get_membership(item.bucket_list, request.user)
+        
+        if not self.can_vote(item.bucket_list, membership):
+            return Response(
+                {"detail": "You do not have permission to vote."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        vote_type = request.data.get("vote_type")
+        
+        if vote_type not in [
+            ItemVote.VoteTypeChoices.UPVOTE,
+            ItemVote.VoteTypeChoices.DOWNVOTE,
+        ]:
+            return Response(
+                {"detail": "vote_type must be 'upvote' or 'downvote'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+            
+        vote, created = ItemVote.objects.update_or_create(
+            item=item,
+            user=request.user,
+            defaults={"vote_type": vote_type},
+        )
+        
+        serializer = ItemVoteSerializer(vote, context={"request": request})
+        
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+        
+    def delete(self, request, pk):
+        item = self.get_item(pk, request.user)
+        membership = self.get_membership(item.bucket_list, request.user)
+        
+        if not self.can_vote(item.bucket_list, membership):
+            return Response(
+                {"detail": "You cannot remove a vote from this item."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        try:
+            vote = ItemVote.objects.get(item=item, user=request.user)
+        except ItemVote.DoesNotExist:
+            return Response(
+                {"detail": "You do not have a vote on this item."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        vote.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

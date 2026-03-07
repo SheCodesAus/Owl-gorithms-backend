@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import BucketList, BucketListMembership, BucketListItem
+from .models import BucketList, BucketListMembership, BucketListItem, ItemVote
 
 class BucketListMembershipSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source="user.email", read_only=True)
@@ -29,6 +29,7 @@ class BucketListItemSerializer(serializers.ModelSerializer):
     upvotes_count = serializers.IntegerField(read_only=True)
     downvotes_count = serializers.IntegerField(read_only=True)
     score = serializers.IntegerField(read_only=True)
+    user_vote = serializers.SerializerMethodField()
     
     class Meta:
         model = BucketListItem
@@ -44,6 +45,7 @@ class BucketListItemSerializer(serializers.ModelSerializer):
             "upvotes_count",
             "downvotes_count",
             "score",
+            "user_vote",
             "created_at",
             "updated_at",
         ]
@@ -56,9 +58,23 @@ class BucketListItemSerializer(serializers.ModelSerializer):
             "upvotes_count",
             "downvotes_count",
             "score",
+            "user_vote",
             "created_at",
             "updated_at",
         ]
+        
+    def get_user_vote(self, obj):
+        request = self.context.get("request")
+        
+        if not request or not request.user.is_authenticated:
+            return None
+        
+        vote = obj.votes.filter(user=request.user).first()
+        
+        if vote:
+            return vote.vote_type
+        
+        return None
         
 class BucketListSerializer(serializers.ModelSerializer):
     owner_email = serializers.EmailField(source="owner.email", read_only=True)
@@ -118,3 +134,22 @@ class BucketListSerializer(serializers.ModelSerializer):
         )
         
         return bucket_list
+    
+class ItemVoteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ItemVote
+        fields = [
+            "id",
+            "item",
+            "user",
+            "vote_type",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "item",
+            "user",
+            "created_at",
+            "updated_at"
+        ]
