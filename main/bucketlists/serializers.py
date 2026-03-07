@@ -49,6 +49,7 @@ class BucketListItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "bucket_list",
             "created_by",
             "created_by_email",
             "completed_at",
