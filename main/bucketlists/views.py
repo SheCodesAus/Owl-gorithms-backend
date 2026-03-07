@@ -469,7 +469,91 @@ class BucketListInviteManage(APIView):
 class BucketListInviteDetail(APIView):
     """
     Preview invite by token
+    Useful when someone opens link and we want front end to show:
+    List Title
+    Role they'll join as
+    If they're already a member
     """
     permission_classes = [permissions.IsAuthenticated]
     
+    def get_invite(self, token):
+        try:
+            return BucketListInvite.objects.select_related("bucket_list", "bucket_list__owner").get(token=token)
+        except BucketListInvite.DoesNotExist:
+            raise Http404
+        
+    def get(self, request, token):
+        invite = self.get_invite(token)
+        
+        already_member = BucketListMembership.objects.filter(
+            bucket_list=invite.bucket_list,
+            user=request.user,
+            ).exists()
+        
+        serializer = BucketListInviteSerializer(invite, context={"request": request})
+        
+        data = serializer.data
+        data["bucket_list_title"] = invite.bucket_list.title
+        data["bucket_list_description"] = invite.bucket_list.description
+        data["owner_email"] = invite.bucket_list.owner.email
+        data["already_member"] = already_member
+        
+        return Response(data, status=status.HTTP_200_OK)
     
+class BucketListInviteAccept(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_invite(self, token):
+        try:
+            return BucketListInvite.objects.select_related("bucket_list").get(token=token)
+        except BucketListInvite.DoesNotExist:
+            raise Http404
+        
+    def post(self, request, token):
+        invite = self.get_invite(token)
+        
+        serializer = InviteAcceptSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        if not invite.is_active:
+            return Response(
+                {"detail": "This invite is inactive."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        if invite.is_expired:
+            return Response(
+                {"detail": "This invite has expired."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        existing_membership = BucketListMembership.objects.filter(
+            bucket_list=invite.bucket_list,
+            user=request.user,
+        ).first()
+        
+        if existing_membership:
+            return Response(
+                {"detail": "You are already a member of this bucket list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+            
+        membership = BucketListMembership.objects.create(
+            bucket_list=invite.bucket_list,
+            user=request.user,
+            role=invite.role,
+        )
+        
+        return Response(
+            {
+                "detail": "Invite accepted successfully.",
+                "bucket_list_id": invite.bucket_list.id,
+                "membership_id": membership.id,
+                "role": membership.role,
+            },
+            status=status.HTTP_201_CREATED
+        )

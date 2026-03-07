@@ -188,11 +188,11 @@ class BucketListInviteSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         
-        def get_invite_url(self, obj):
-            request = self.context.get("request")
-            if not request:
-                return None
-            return request.build_absolute_uri(f"/invites/{obj.token}/")
+    def get_invite_url(self, obj):
+        request = self.context.get("request")
+        if not request:
+            return None
+        return request.build_absolute_uri(f"/invites/{obj.token}/")
     
 class InviteAcceptSerializer(serializers.Serializer):
     accept = serializers.BooleanField()
