@@ -172,3 +172,99 @@ class BucketListItemListCreate(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+        
+class BucketListItemDetail(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_item(self, pk, user):
+        try:
+            return BucketListItem.objects.get(
+                pk=pk,
+                bucket_list__memberships__user=user
+            )
+        except BucketListItem.DoesNotExist:
+            raise Http404
+        
+    def get_membership(self, bucket_list, user):
+        try:
+            return BucketListMembership.objects.get(
+                bucket_list=bucket_list,
+                user=user,
+            )
+        except BucketListMembership.DoesNotExist:
+            raise Http404
+        
+    def is_owner(self, bucket_list, user):
+        return bucket_list.owner == user
+    
+    def can_edit_or_delete_item(self, item, user, membership):
+        if self.is_owner(item.bucket_list, user):
+            return True
+        if item.bucket_list.is_frozen:
+            return False
+        
+        if (
+            membership.role == BucketListMembership.RoleChoices.EDITOR
+            and item.created_by == user
+        ):
+            return True
+        
+        return False
+    
+    def get(self, request, pk):
+        item = self.get_item(pk, request.user)
+        serializer = BucketListItemSerializer(item, context={"request": request})
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+        
+    def put(self, request, pk):
+        item = self.get_item(pk, request.user)
+        membership = self.get_membership(item.bucket_list, request.user)
+        
+        if not self.can_edit_or_delete_item(item, request.user, membership):
+            return Response(
+                {"detail": "You do not have permission to update this item."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        data = request.data.copy()
+        
+        if not self.is_owner(item.bucket_list, request.user) and "status" in data:
+            return Response(
+                {"detail": "Only the owner can change item status."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        serializer = BucketListItemSerializer(
+            item,
+            data=data,
+            partial=True,
+            context={"request": request},
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
+        
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+        
+    def delete(self, request, pk):
+        item = self.get_item(pk, request.user)
+        membership = self.get_membership(item.bucket_list, request.user)
+        
+        if not self.can_edit_or_delete_item(item, request.user, membership):
+            return Response(
+                {"detail": "You do not have permission to delete this item."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+            
+        item.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
