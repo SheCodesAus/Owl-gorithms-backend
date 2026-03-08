@@ -93,6 +93,7 @@ class BucketListSerializer(serializers.ModelSerializer):
             "decision_deadline",
             "allow_viewer_voting",
             "is_frozen",
+            "is_public",
             "memberships",
             "items",
             "created_at",
