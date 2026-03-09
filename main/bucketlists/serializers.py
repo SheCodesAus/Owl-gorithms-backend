@@ -23,7 +23,8 @@ class BucketListMembershipSerializer(serializers.ModelSerializer):
         ]
         
 class BucketListItemSerializer(serializers.ModelSerializer):
-    created_by_email = serializers.EmailField(source="created_by.email", read_only=True)
+    creator = UserBasicSerializer(source="created_by", read_only=True)
+    creator_email = serializers.EmailField(source="created_by.email", read_only=True)
     upvotes_count = serializers.IntegerField(read_only=True)
     downvotes_count = serializers.IntegerField(read_only=True)
     score = serializers.IntegerField(read_only=True)
@@ -34,8 +35,8 @@ class BucketListItemSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "bucket_list",
-            "created_by",
-            "created_by_email",
+            "creator",
+            "creator_email",
             "title",
             "description",
             "status",
@@ -50,8 +51,8 @@ class BucketListItemSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "bucket_list",
-            "created_by",
-            "created_by_email",
+            "creator",
+            "creator_email",
             "completed_at",
             "upvotes_count",
             "downvotes_count",
