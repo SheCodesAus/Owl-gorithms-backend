@@ -1,26 +1,24 @@
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
+from users.serializers import UserBasicSerializer
 
 from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite
 
 class BucketListMembershipSerializer(serializers.ModelSerializer):
-    user_email = serializers.EmailField(source="user.email", read_only=True)
-    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    user = UserBasicSerializer(read_only=True)
     
     class Meta:
         model = BucketListMembership
         fields = [
             "id",
-            "user_id",
-            "user_email",
+            "user",
             "role",
             "joined_at",
         ]
         read_only_fields = [
             "id",
-            "user_id",
-            "user_email",
+            "user",
             "joined_at",
         ]
         
@@ -77,6 +75,7 @@ class BucketListItemSerializer(serializers.ModelSerializer):
         return None
         
 class BucketListSerializer(serializers.ModelSerializer):
+    owner = UserBasicSerializer(read_only=True)
     owner_email = serializers.EmailField(source="owner.email", read_only=True)
     memberships = BucketListMembershipSerializer(many=True, read_only=True)
     items = BucketListItemSerializer(many=True, read_only=True)
