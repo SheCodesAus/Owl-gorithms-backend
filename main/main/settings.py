@@ -34,8 +34,26 @@ DEBUG = os.environ.get(
     'DJANGO_DEBUG'
 ) != 'False'
 
-ALLOWED_HOSTS = ['*']
-CORS_ORIGIN_ALLOW_ALL = True
+# This tells Django what domain requests it will accept
+# I.e if frontend hits the backend with the url example.com
+# Then it checks if example.com is in the allowed_hosts
+# And passes or fails it
+ALLOWED_HOSTS = ["*"]
+
+# This is all the setup for CORS headers
+# These are checks the browser checks and enforces
+# it pulls these settings from the server before hitting
+# the endpoint with a OPTION request(preflight) and browser
+# then checks if the frontend is allowed to fetch endpoint.
+# Essentiattly it adds the headers in the browser:
+# access-control-allow-credentials: true
+# access-control-allow-origin: http://localhost:5173
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_ALLOW_ALL = False
+# You could set CORS_ORIGIN_ALLOW_ALL = True
+# And comment out below and it would still work
+# but a little unsecure
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
