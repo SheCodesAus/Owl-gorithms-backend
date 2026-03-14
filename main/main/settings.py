@@ -129,6 +129,7 @@ SIMPLE_JWT = {
 }
 
 LOGIN_REDIRECT_URL = '/api/auth/google/callback/'
+FRONTEND_URL = os.environ.get('FRONTEND_URL')
 
 SOCIALACCOUNT_LOGIN_ON_GET = True
 

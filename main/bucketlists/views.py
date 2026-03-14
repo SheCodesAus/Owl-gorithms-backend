@@ -474,7 +474,7 @@ class BucketListInviteDetail(APIView):
     Role they'll join as
     If they're already a member
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     
     def get_invite(self, token):
         try:
@@ -485,9 +485,11 @@ class BucketListInviteDetail(APIView):
     def get(self, request, token):
         invite = self.get_invite(token)
         
-        already_member = BucketListMembership.objects.filter(
-            bucket_list=invite.bucket_list,
-            user=request.user,
+        already_member = False
+        if request.user.is_authenticated:
+            already_member = BucketListMembership.objects.filter(
+                bucket_list=invite.bucket_list,
+                user=request.user,
             ).exists()
         
         serializer = BucketListInviteSerializer(invite, context={"request": request})

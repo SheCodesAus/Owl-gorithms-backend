@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.utils import timezone
+from django.conf import settings
 from rest_framework import serializers
 from users.serializers import UserBasicSerializer
 
@@ -193,7 +194,7 @@ class BucketListInviteSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request:
             return None
-        return request.build_absolute_uri(f"/invites/{obj.token}/")
+        return f"{settings.FRONTEND_URL}/invites/{obj.token}"
     
 class InviteAcceptSerializer(serializers.Serializer):
     accept = serializers.BooleanField()
