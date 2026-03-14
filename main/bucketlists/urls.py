@@ -8,6 +8,7 @@ from .views import (
     BucketListInviteManage,
     BucketListInviteDetail,
     BucketListInviteAccept,
+    BucketListMembershipDetail,
 )
 
 urlpatterns = [
@@ -43,5 +44,10 @@ urlpatterns = [
         "invites/<str:token>/accept/",
         BucketListInviteAccept.as_view(),
         name="bucketlist-invite-accept",
-    )
+    ),
+    path(
+    "bucketlists/<int:bucket_list_id>/members/<int:membership_id>/",
+    BucketListMembershipDetail.as_view(),
+    name="bucketlist-membership-detail",
+    ),
 ]

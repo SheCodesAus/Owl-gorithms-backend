@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status, permissions
 
 from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite
-from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer, BucketListInviteSerializer, InviteAcceptSerializer
+from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer, BucketListInviteSerializer, InviteAcceptSerializer, BucketListMembershipSerializer, BucketListMembershipUpdateSerializer
 
 class BucketListList(APIView):
     """
@@ -558,4 +558,100 @@ class BucketListInviteAccept(APIView):
                 "role": membership.role,
             },
             status=status.HTTP_201_CREATED
+        )
+        
+class BucketListMembershipDetail(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_bucket_list(self, bucket_list_id, user):
+        try:
+            return BucketList.objects.get(
+                pk=bucket_list_id,
+                memberships__user=user,
+            )
+        except BucketList.DoesNotExist:
+            raise Http404
+        
+    def get_membership(self, bucket_list, membership_id):
+        try:
+            return BucketListMembership.objects.select_related("user", "bucket_list").get(
+                pk=membership_id,
+                bucket_list=bucket_list,
+            )
+        except BucketListMembership.DoesNotExist:
+            raise Http404
+        
+    def is_owner(self, bucket_list, user):
+        return bucket_list.owner == user
+    
+    def put(self, request, bucket_list_id, membership_id):
+        bucket_list = self.get_bucket_list(bucket_list_id, request.user)
+        
+        if not self.is_owner(bucket_list, request.user):
+            return Response(
+                {"detail": "Only the owner can update member roles."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+            
+        membership = self.get_membership(bucket_list, membership_id)
+        
+        if membership.user == request.user:
+            return Response(
+                {"detail": "Owners cannot change their own membership role."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+            
+        serializer = BucketListMembershipUpdateSerializer(
+            membership,
+            data=request.data,
+            partial=True,
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            
+            response_serializer = BucketListMembershipSerializer(
+                membership,
+                context={"request": request},
+            )
+            return Response(
+                response_serializer.data,
+                status=status.HTTP_200_OK,
+            )
+            
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+        
+    def delete(self, request, bucket_list_id, membership_id):
+        bucket_list = self.get_bucket_list(bucket_list_id, request.user)
+        membership = self.get_membership(bucket_list, membership_id)
+    
+        is_owner = self.is_owner(bucket_list, request.user)
+        is_self = membership.user == request.user
+    
+        if membership.user == bucket_list.owner:
+            return Response(
+                {"detail": "The owner cannot be removed from the bucket list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    
+        if not is_owner and not is_self:
+            return Response(
+                {"detail": "You do not have permission to remove this member."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+    
+        membership.delete()
+    
+        if is_self:
+            return Response(
+                {"detail": "You have left the bucket list successfully."},
+                status=status.HTTP_200_OK,
+            )
+    
+        return Response(
+            {"detail": "Member removed successfully."},
+            status=status.HTTP_200_OK,
         )

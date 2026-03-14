@@ -203,3 +203,22 @@ class InviteAcceptSerializer(serializers.Serializer):
         if value is not True:
             raise serializers.ValidationError("You must accept the invite to join the list.")
         return value
+    
+    
+class BucketListMembershipUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BucketListMembership
+        fields = ["role"]
+        
+    def validate_role(self, value):
+        allowed_roles = [
+            BucketListMembership.RoleChoices.EDITOR,
+            BucketListMembership.RoleChoices.VIEWER,
+        ]
+        
+        if value not in allowed_roles:
+            raise serializers.ValidationError(
+                "Role must be either 'editor' or 'viewer'."
+            )
+            
+        return value
