@@ -1,54 +1,224 @@
+from django.db import transaction
+from django.utils import timezone
+from django.conf import settings
 from rest_framework import serializers
-from .models import BucketList, BucketItem, BucketListMember
+from users.serializers import UserBasicSerializer
 
-class BucketListMemberSerializer(serializers.ModelSerializer):
-    # Show basic member info without nesting whole user serializer
-    user_id = serializers.IntegerField(source="user.id", read_only=True)
-    username = serializers.CharField(source="user.username", read_only=True)
+from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite
+
+class BucketListMembershipSerializer(serializers.ModelSerializer):
+    user = UserBasicSerializer(read_only=True)
     
     class Meta:
-        model = BucketListMember
-        fields = "__all__"
-        read_only_fields = [
+        model = BucketListMembership
+        fields = [
             "id",
-            "user_id",
-            "username",
+            "user",
+            "role",
             "joined_at",
         ]
-
+        read_only_fields = [
+            "id",
+            "user",
+            "joined_at",
+        ]
+        
+class BucketListItemSerializer(serializers.ModelSerializer):
+    creator = UserBasicSerializer(source="created_by", read_only=True)
+    creator_email = serializers.EmailField(source="created_by.email", read_only=True)
+    upvotes_count = serializers.IntegerField(read_only=True)
+    downvotes_count = serializers.IntegerField(read_only=True)
+    score = serializers.IntegerField(read_only=True)
+    user_vote = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = BucketListItem
+        fields = [
+            "id",
+            "bucket_list",
+            "creator",
+            "creator_email",
+            "title",
+            "description",
+            "status",
+            "completed_at",
+            "upvotes_count",
+            "downvotes_count",
+            "score",
+            "user_vote",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "bucket_list",
+            "creator",
+            "creator_email",
+            "completed_at",
+            "upvotes_count",
+            "downvotes_count",
+            "score",
+            "user_vote",
+            "created_at",
+            "updated_at",
+        ]
+        
+    def get_user_vote(self, obj):
+        request = self.context.get("request")
+        
+        if not request or not request.user.is_authenticated:
+            return None
+        
+        vote = obj.votes.filter(user=request.user).first()
+        
+        if vote:
+            return vote.vote_type
+        
+        return None
+        
 class BucketListSerializer(serializers.ModelSerializer):
-    
-    owner_id = serializers.IntegerField(source="owner.id", read_only=True)
-    owner_username = serializers.CharField(source="owner.username", read_only=True)
-    
-    #show members + roles
-    memberships = BucketListMemberSerializer(many=True, read_only=True)
+    owner = UserBasicSerializer(read_only=True)
+    owner_email = serializers.EmailField(source="owner.email", read_only=True)
+    memberships = BucketListMembershipSerializer(many=True, read_only=True)
+    items = BucketListItemSerializer(many=True, read_only=True)
+    is_frozen = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = BucketList
-        fields = "__all__"
+        fields = [
+            "id",
+            "owner",
+            "owner_email",
+            "title",
+            "description",
+            "decision_deadline",
+            "allow_viewer_voting",
+            "is_frozen",
+            "is_public",
+            "memberships",
+            "items",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = [
             "id",
-            "date_created",
             "owner",
-            "owner_id",
-            "owner_username"]
+            "owner_email",
+            "is_frozen",
+            "memberships",
+            "items",
+            "created_at",
+            "updated_at",
+        ]
         
-class BucketItemSerializer(serializers.ModelSerializer):
-    bucket_list_id = serializers.IntegerField(source="bucket_list.id", read_only=True)
-    created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
-    created_by_username = serializers.CharField(source="created_by.username", read_only=True)
+    def validate_decision_deadline(self, value):
+        if value is not None:
+            if value <= timezone.now():
+                raise serializers.ValidationError(
+                    "Decision deadline must be in the future."
+                )
+        return value
+    
+    @transaction.atomic
+    def create(self, validated_data):
+        request = self.context["request"]
+        user = request.user
+        
+        bucket_list = BucketList.objects.create(
+            owner=user,
+            **validated_data
+        )
+        
+        BucketListMembership.objects.create(
+            bucket_list=bucket_list,
+            user=user,
+            role=BucketListMembership.RoleChoices.OWNER,
+        )
+        
+        return bucket_list
+    
+class ItemVoteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ItemVote
+        fields = [
+            "id",
+            "item",
+            "user",
+            "vote_type",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "item",
+            "user",
+            "created_at",
+            "updated_at"
+        ]
+        
+class BucketListInviteSerializer(serializers.ModelSerializer):
+    invite_url = serializers.SerializerMethodField()
+    is_expired = serializers.BooleanField(read_only=True)
+    is_valid = serializers.BooleanField(read_only=True)
     
     class Meta:
-        model = BucketItem
-        fields = "__all__"
+        model = BucketListInvite
+        fields = [
+            "id",
+            "bucket_list",
+            "role",
+            "token",
+            "invite_url",
+            "expires_at",
+            "is_active",
+            "is_expired",
+            "is_valid",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = [
             "id",
-            "created_by",
-            "created_by_id",
-            "created_by_username",
-            "date_created",
-            "date_updated",
-            "completed_at",
-            "bucket_list_id",
+            "bucket_list",
+            "role",
+            "token",
+            "invite_url",
+            "expires_at",
+            "is_active",
+            "is_expired",
+            "is_valid",
+            "created_at",
+            "updated_at",
         ]
+        
+    def get_invite_url(self, obj):
+        request = self.context.get("request")
+        if not request:
+            return None
+        return f"{settings.FRONTEND_URL}/invites/{obj.token}"
+    
+class InviteAcceptSerializer(serializers.Serializer):
+    accept = serializers.BooleanField()
+    
+    def validate_accept(self, value):
+        if value is not True:
+            raise serializers.ValidationError("You must accept the invite to join the list.")
+        return value
+    
+    
+class BucketListMembershipUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BucketListMembership
+        fields = ["role"]
+        
+    def validate_role(self, value):
+        allowed_roles = [
+            BucketListMembership.RoleChoices.EDITOR,
+            BucketListMembership.RoleChoices.VIEWER,
+        ]
+        
+        if value not in allowed_roles:
+            raise serializers.ValidationError(
+                "Role must be either 'editor' or 'viewer'."
+            )
+            
+        return value
