@@ -133,7 +133,7 @@ class BucketListSerializer(serializers.ModelSerializer):
     owner_email = serializers.EmailField(source="owner.email", read_only=True)
     memberships = BucketListMembershipSerializer(many=True, read_only=True)
     items = BucketListItemSerializer(many=True, read_only=True)
-    is_frozen = serializers.BooleanField()
+    is_frozen = serializers.ReadOnlyField()
     is_date_range = serializers.ReadOnlyField()
     has_time = serializers.ReadOnlyField()
     

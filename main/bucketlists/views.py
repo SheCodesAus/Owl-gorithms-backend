@@ -78,6 +78,7 @@ class BucketListDetail(APIView):
         serializer = BucketListSerializer(
             bucket_list,
             data=request.data,
+            partial=True,
             context={"request": request}
         )
         
