@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from datetime import timedelta
 import secrets
 
@@ -25,6 +26,12 @@ class BucketList(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_public = models.BooleanField(default=False)
     
+    # New scheduling fields
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    
     def __str__(self):
         return self.title
     
@@ -33,6 +40,54 @@ class BucketList(models.Model):
         if not self.decision_deadline:
             return False
         return timezone.now() >= self.decision_deadline
+    
+    @property
+    def is_date_range(self):
+        return bool(self.start_date and self.end_date and self.start_date != self.end_date)
+
+    @property
+    def has_time(self):
+        return bool(self.start_time or self.end_time)
+
+    def clean(self):
+        errors = {}
+
+        if self.end_date and not self.start_date:
+            errors["end_date"] = "End date cannot be set without a start date."
+    
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            errors["end_date"] = "End date cannot be earlier than start date."
+    
+        if self.start_time and not self.start_date:
+            errors["start_time"] = "Start time requires a start date."
+    
+        if self.end_time and not self.start_date:
+            errors["end_time"] = "End time requires a start date."
+    
+        if self.start_time and not self.end_time:
+            errors["end_time"] = "End time is required when a start time is provided."
+    
+        if self.end_time and not self.start_time:
+            errors["start_time"] = "Start time is required when an end time is provided."
+    
+        effective_end_date = self.end_date or self.start_date
+    
+        if (
+            self.start_date
+            and effective_end_date == self.start_date
+            and self.start_time
+            and self.end_time
+            and self.end_time <= self.start_time
+        ):
+            errors["end_time"] = "End time must be later than start time for a single-day event."
+    
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
 
 class BucketListMembership(models.Model):
     """
@@ -80,9 +135,8 @@ class BucketListItem(models.Model):
     """
     class StatusChoices(models.TextChoices):
         PROPOSED = "proposed", "Proposed"
-        LOCKED_IN = "locked_in", "Locked_in"
+        LOCKED_IN = "locked_in", "Locked In"
         COMPLETE = "complete", "Complete"
-        CANCELLED = "cancelled", "Cancelled"
         
     class Meta:
         ordering = ["-created_at"]
@@ -109,6 +163,12 @@ class BucketListItem(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # New scheduling fields
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    
     def __str__(self):
         return self.title
     
@@ -124,11 +184,56 @@ class BucketListItem(models.Model):
     def score(self):
         return self.upvotes_count - self.downvotes_count
     
+    @property
+    def is_date_range(self):
+        return bool(self.start_date and self.end_date and self.start_date != self.end_date)
+
+    @property
+    def has_time(self):
+        return bool(self.start_time or self.end_time)
+
+    def clean(self):
+        errors = {}
+
+        if self.end_date and not self.start_date:
+            errors["end_date"] = "End date cannot be set without a start date."
+    
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            errors["end_date"] = "End date cannot be earlier than start date."
+    
+        if self.start_time and not self.start_date:
+            errors["start_time"] = "Start time requires a start date."
+    
+        if self.end_time and not self.start_date:
+            errors["end_time"] = "End time requires a start date."
+    
+        if self.start_time and not self.end_time:
+            errors["end_time"] = "End time is required when a start time is provided."
+    
+        if self.end_time and not self.start_time:
+            errors["start_time"] = "Start time is required when an end time is provided."
+    
+        effective_end_date = self.end_date or self.start_date
+    
+        if (
+            self.start_date
+            and effective_end_date == self.start_date
+            and self.start_time
+            and self.end_time
+            and self.end_time <= self.start_time
+        ):
+            errors["end_time"] = "End time must be later than start time for a single-day item."
+    
+        if errors:
+            raise ValidationError(errors)
+    
     def save(self, *args, **kwargs):
         if self.status == self.StatusChoices.COMPLETE and self.completed_at is None:
             self.completed_at = timezone.now()
         elif self.status != self.StatusChoices.COMPLETE:
             self.completed_at = None
+
+        self.full_clean()
         super().save(*args, **kwargs)
         
 class ItemVote(models.Model):
