@@ -30,6 +30,8 @@ class BucketListItemSerializer(serializers.ModelSerializer):
     downvotes_count = serializers.IntegerField(read_only=True)
     score = serializers.IntegerField(read_only=True)
     user_vote = serializers.SerializerMethodField()
+    is_date_range = serializers.ReadOnlyField()
+    has_time = serializers.ReadOnlyField()
     
     class Meta:
         model = BucketListItem
@@ -48,6 +50,12 @@ class BucketListItemSerializer(serializers.ModelSerializer):
             "user_vote",
             "created_at",
             "updated_at",
+            "start_date",
+            "end_date",
+            "start_time",
+            "end_time",
+            "is_date_range",
+            "has_time",
         ]
         read_only_fields = [
             "id",
@@ -61,6 +69,8 @@ class BucketListItemSerializer(serializers.ModelSerializer):
             "user_vote",
             "created_at",
             "updated_at",
+            "is_date_range",
+            "has_time",
         ]
         
     def get_user_vote(self, obj):
@@ -75,13 +85,57 @@ class BucketListItemSerializer(serializers.ModelSerializer):
             return vote.vote_type
         
         return None
-        
+    
+    def validate(self, attrs):
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        start_time = attrs.get("start_time", getattr(self.instance, "start_time", None))
+        end_time = attrs.get("end_time", getattr(self.instance, "end_time", None))
+
+        errors = {}
+
+        if end_date and not start_date:
+            errors["end_date"] = "End date cannot be set without a start date."
+
+        if start_date and end_date and end_date < start_date:
+            errors["end_date"] = "End date cannot be earlier than start date."
+
+        if start_time and not start_date:
+            errors["start_time"] = "Start time requires a start date."
+
+        if end_time and not start_date:
+            errors["end_time"] = "End time requires a start date."
+
+        if start_time and not end_time:
+            errors["end_time"] = "End time is required when a start time is provided."
+
+        if end_time and not start_time:
+            errors["start_time"] = "Start time is required when an end time is provided."
+
+        effective_end_date = end_date or start_date
+
+        if (
+            start_date
+            and effective_end_date == start_date
+            and start_time
+            and end_time
+            and end_time <= start_time
+        ):
+            errors["end_time"] = "End time must be later than start time for a single-day item."
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
+
 class BucketListSerializer(serializers.ModelSerializer):
     owner = UserBasicSerializer(read_only=True)
     owner_email = serializers.EmailField(source="owner.email", read_only=True)
     memberships = BucketListMembershipSerializer(many=True, read_only=True)
     items = BucketListItemSerializer(many=True, read_only=True)
-    is_frozen = serializers.BooleanField(read_only=True)
+    is_frozen = serializers.BooleanField()
+    is_date_range = serializers.ReadOnlyField()
+    has_time = serializers.ReadOnlyField()
     
     class Meta:
         model = BucketList
@@ -92,6 +146,12 @@ class BucketListSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "decision_deadline",
+            "start_date",
+            "end_date",
+            "start_time",
+            "end_time",
+            "is_date_range",
+            "has_time",
             "allow_viewer_voting",
             "is_frozen",
             "is_public",
@@ -104,6 +164,8 @@ class BucketListSerializer(serializers.ModelSerializer):
             "id",
             "owner",
             "owner_email",
+            "is_date_range",
+            "has_time",
             "is_frozen",
             "memberships",
             "items",
@@ -118,6 +180,48 @@ class BucketListSerializer(serializers.ModelSerializer):
                     "Decision deadline must be in the future."
                 )
         return value
+    
+    def validate(self, attrs):
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        start_time = attrs.get("start_time", getattr(self.instance, "start_time", None))
+        end_time = attrs.get("end_time", getattr(self.instance, "end_time", None))
+
+        errors = {}
+
+        if end_date and not start_date:
+            errors["end_date"] = "End date cannot be set without a start date."
+
+        if start_date and end_date and end_date < start_date:
+            errors["end_date"] = "End date cannot be earlier than start date."
+
+        if start_time and not start_date:
+            errors["start_time"] = "Start time requires a start date."
+
+        if end_time and not start_date:
+            errors["end_time"] = "End time requires a start date."
+
+        if start_time and not end_time:
+            errors["end_time"] = "End time is required when a start time is provided."
+
+        if end_time and not start_time:
+            errors["start_time"] = "Start time is required when an end time is provided."
+
+        effective_end_date = end_date or start_date
+
+        if (
+            start_date
+            and effective_end_date == start_date
+            and start_time
+            and end_time
+            and end_time <= start_time
+        ):
+            errors["end_time"] = "End time must be later than start time for a single-day event."
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
     
     @transaction.atomic
     def create(self, validated_data):
