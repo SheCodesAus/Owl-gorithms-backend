@@ -342,6 +342,8 @@ class NotificationSerializer(serializers.ModelSerializer):
     item_id = serializers.IntegerField(
         source="item.id", read_only=True, default=None
     )
+    item_score = serializers.SerializerMethodField()
+    item_user_vote = serializers.SerializerMethodField()
     
     class Meta:
         model = Notification
@@ -355,6 +357,8 @@ class NotificationSerializer(serializers.ModelSerializer):
             "bucket_list_title",
             "item_id",
             "item_title",
+            "item_score",
+            "item_user_vote",
             "created_at",
         ]
         read_only_fields = fields
@@ -365,3 +369,17 @@ class NotificationSerializer(serializers.ModelSerializer):
         if hasattr(obj.actor, "display_name") and obj.actor.display_name:
             return obj.actor.display_name
         return obj.actor.username
+    
+    def get_item_score(self, obj):
+        if not obj.item:
+            return None
+        return obj.item.score
+ 
+    def get_item_user_vote(self, obj):
+        if not obj.item:
+            return None
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+        vote = obj.item.votes.filter(user=request.user).first()
+        return vote.vote_type if vote else None

@@ -675,7 +675,11 @@ class NotificationList(APIView):
             recipient=request.user
         ).select_related("actor", "bucket_list", "item")
  
-        serializer = NotificationSerializer(notifications, many=True)
+        serializer = NotificationSerializer(
+            notifications,
+            many=True,
+            context={"request": request},
+            )
         return Response(serializer.data, status=status.HTTP_200_OK)
  
  
