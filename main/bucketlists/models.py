@@ -334,3 +334,56 @@ class BucketListInvite(models.Model):
         self.is_active = True
         self.set_expiry()
         self.save()
+        
+class Notification(models.Model):
+    """
+    In-app noifications for bucket list members.
+    Created by signals and the freeze_reminder management command.
+    """
+    
+    class TypeChoices(models.TextChoices):
+        ITEM_ADDED = "item_added", "Item Added"
+        ITEM_LOCKED_IN = "item_locked_in", "Item Locked In"
+        ITEM_COMPLETED = "item_completed", "Item Completed"
+        LIST_FROZEN = "list_frozen", "List Frozen"
+        FREEZE_REMINDER = "freeze_reminder", "Freeze Reminder"
+        
+    class Meta:
+        ordering = ["-created_at"]
+        
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="triggered_notifications",
+    )
+    notification_type = models.CharField(
+        max_length=50,
+        choices=TypeChoices.choices,
+    )
+    bucket_list = models.ForeignKey(
+        BucketList,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
+    item = models.ForeignKey(
+        BucketListItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="notifications",
+    )
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"[{self.notification_type}] → {self.recipient} — {self.message[:60]}"

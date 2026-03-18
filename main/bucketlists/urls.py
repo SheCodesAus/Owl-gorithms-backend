@@ -9,6 +9,9 @@ from .views import (
     BucketListInviteDetail,
     BucketListInviteAccept,
     BucketListMembershipDetail,
+    NotificationList,
+    NotificationUnreadCount,
+    NotificationMarkRead
 )
 
 urlpatterns = [
@@ -50,4 +53,7 @@ urlpatterns = [
     BucketListMembershipDetail.as_view(),
     name="bucketlist-membership-detail",
     ),
+    path("notifications/", NotificationList.as_view(), name="notification-list"),
+    path("notifications/unread-count/", NotificationUnreadCount.as_view(), name="notification-unread-count"),
+    path("notifications/read/", NotificationMarkRead.as_view(), name="notification-mark-read"),
 ]

@@ -4,7 +4,7 @@ from django.conf import settings
 from rest_framework import serializers
 from users.serializers import UserBasicSerializer
 
-from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite
+from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite, Notification
 
 class BucketListMembershipSerializer(serializers.ModelSerializer):
     user = UserBasicSerializer(read_only=True)
@@ -326,3 +326,42 @@ class BucketListMembershipUpdateSerializer(serializers.ModelSerializer):
             )
             
         return value
+    
+    
+class NotificationSerializer(serializers.ModelSerializer):
+    actor_name = serializers.SerializerMethodField()
+    bucket_list_title = serializers.CharField(
+        source="bucket_list.title", read_only=True, default=None
+    )
+    item_title = serializers.CharField(
+        source="item.title", read_only=True, default=None
+    )
+    bucket_list_id = serializers.IntegerField(
+        source="bucket_list.id", read_only=True, default=None
+    )
+    item_id = serializers.IntegerField(
+        source="item.id", read_only=True, default=None
+    )
+    
+    class Meta:
+        model = Notification
+        fields = [
+            "id",
+            "notification_type",
+            "message",
+            "is_read",
+            "actor_name",
+            "bucket_list_id",
+            "bucket_list_title",
+            "item_id",
+            "item_title",
+            "created_at",
+        ]
+        read_only_fields = fields
+ 
+    def get_actor_name(self, obj):
+        if not obj.actor:
+            return None
+        if hasattr(obj.actor, "display_name") and obj.actor.display_name:
+            return obj.actor.display_name
+        return obj.actor.username

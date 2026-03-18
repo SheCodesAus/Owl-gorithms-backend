@@ -2,9 +2,10 @@ from django.http import Http404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
+from .notification_services import notify_item_added, notify_item_status_changed
 
-from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite
-from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer, BucketListInviteSerializer, InviteAcceptSerializer, BucketListMembershipSerializer, BucketListMembershipUpdateSerializer
+from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite, Notification
+from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer, BucketListInviteSerializer, InviteAcceptSerializer, BucketListMembershipSerializer, BucketListMembershipUpdateSerializer, NotificationSerializer
 
 class BucketListList(APIView):
     """
@@ -163,6 +164,7 @@ class BucketListItemListCreate(APIView):
                 bucket_list=bucket_list,
                 created_by=request.user,
             )
+            notify_item_added(item, actor=request.user)
             response_serializer = BucketListItemSerializer(item, context={"request": request})
             return Response(
                 response_serializer.data,
@@ -237,6 +239,8 @@ class BucketListItemDetail(APIView):
                 {"detail": "Only the owner can change item status."},
                 status=status.HTTP_403_FORBIDDEN
             )
+        
+        old_status = item.status  # capture BEFORE save
             
         serializer = BucketListItemSerializer(
             item,
@@ -246,7 +250,9 @@ class BucketListItemDetail(APIView):
         )
         
         if serializer.is_valid():
-            serializer.save()
+            updated_item = serializer.save()  # capture return value
+            if old_status != updated_item.status and updated_item.status in ("locked_in", "complete"):
+                notify_item_status_changed(updated_item, actor=request.user)
             return Response(
                 serializer.data,
                 status=status.HTTP_200_OK
@@ -654,5 +660,83 @@ class BucketListMembershipDetail(APIView):
     
         return Response(
             {"detail": "Member removed successfully."},
+            status=status.HTTP_200_OK,
+        )
+        
+class NotificationList(APIView):
+    """
+    GET  /api/notifications/
+    Returns paginated notifications for the current user, unread first.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def get(self, request):
+        notifications = Notification.objects.filter(
+            recipient=request.user
+        ).select_related("actor", "bucket_list", "item")
+ 
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+ 
+ 
+class NotificationUnreadCount(APIView):
+    """
+    GET  /api/notifications/unread-count/
+    Lightweight endpoint polled every 30s by the frontend.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def get(self, request):
+        count = Notification.objects.filter(
+            recipient=request.user,
+            is_read=False,
+        ).count()
+        return Response({"unread_count": count}, status=status.HTTP_200_OK)
+ 
+ 
+class NotificationMarkRead(APIView):
+    """
+    POST /api/notifications/read/
+    Body: { "id": 5 }        → mark one as read
+    Body: { "all": true }    → mark all as read
+    """
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def post(self, request):
+        mark_all = request.data.get("all", False)
+ 
+        if mark_all:
+            Notification.objects.filter(
+                recipient=request.user,
+                is_read=False,
+            ).update(is_read=True)
+            return Response(
+                {"detail": "All notifications marked as read."},
+                status=status.HTTP_200_OK,
+            )
+ 
+        notification_id = request.data.get("id")
+        if not notification_id:
+            return Response(
+                {"detail": "Provide either 'id' or 'all: true'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+ 
+        try:
+            notification = Notification.objects.get(
+                pk=notification_id,
+                recipient=request.user,
+            )
+        except Notification.DoesNotExist:
+            return Response(
+                {"detail": "Notification not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+ 
+        notification.is_read = True
+        notification.save(update_fields=["is_read"])
+ 
+        return Response(
+            {"detail": "Notification marked as read."},
             status=status.HTTP_200_OK,
         )
