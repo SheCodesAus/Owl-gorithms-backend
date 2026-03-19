@@ -134,7 +134,12 @@ class BucketListSerializer(serializers.ModelSerializer):
     owner_email = serializers.EmailField(source="owner.email", read_only=True)
     memberships = BucketListMembershipSerializer(many=True, read_only=True)
     items = BucketListItemSerializer(many=True, read_only=True)
-    decision_deadline = serializers.DateField(required=False, allow_null=True)
+    decision_deadline = serializers.SerializerMethodField(read_only=True)
+    decision_deadline_input = serializers.DateField(
+        write_only=True,
+        required=False,
+        allow_null=True
+    )
     is_frozen = serializers.ReadOnlyField()
     is_date_range = serializers.ReadOnlyField()
     has_time = serializers.ReadOnlyField()
