@@ -60,7 +60,7 @@ def create_notifications_for_members(
 # ── Individual event helpers ──────────────────────────────────────────────────
 
 def notify_item_added(item, actor):
-    actor_name = actor.display_name if hasattr(actor, "display_name") and actor.display_name else actor.username
+    actor_name = actor.display_name if hasattr(actor, "display_name") and actor.display_name else actor.first_name
     create_notifications_for_members(
         bucket_list=item.bucket_list,
         notification_type=Notification.TypeChoices.ITEM_ADDED,
@@ -96,7 +96,7 @@ def notify_list_frozen(bucket_list):
     create_notifications_for_members(
         bucket_list=bucket_list,
         notification_type=Notification.TypeChoices.LIST_FROZEN,
-        message=f"{bucket_list.title} is now frozen. Voting has ended and the top items are locked in.",
+        message=f"Time's up! {bucket_list.title} is now frozen!",
         exclude_actor=False,  # everyone including owner gets this
     )
 
