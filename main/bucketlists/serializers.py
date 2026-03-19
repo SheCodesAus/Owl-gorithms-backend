@@ -392,7 +392,7 @@ class NotificationSerializer(serializers.ModelSerializer):
     )
     item_score = serializers.SerializerMethodField()
     item_user_vote = serializers.SerializerMethodField()
-    
+ 
     class Meta:
         model = Notification
         fields = [
@@ -414,10 +414,16 @@ class NotificationSerializer(serializers.ModelSerializer):
     def get_actor_name(self, obj):
         if not obj.actor:
             return None
-        if hasattr(obj.actor, "display_name") and obj.actor.display_name:
-            return obj.actor.display_name
-        return obj.actor.username
-    
+        actor = obj.actor
+        first = actor.first_name or ""
+        last_initial = f"{actor.last_name[0]}." if actor.last_name else ""
+        name = f"{first} {last_initial}".strip()
+        if name:
+            return name
+        if actor.email:
+            return actor.email.split("@")[0]
+        return actor.username
+ 
     def get_item_score(self, obj):
         if not obj.item:
             return None

@@ -59,26 +59,38 @@ def create_notifications_for_members(
 
 # ── Individual event helpers ──────────────────────────────────────────────────
 
+def _get_actor_name(actor):
+    """Resolve display name using same logic as UserBasicSerializer."""
+    first = actor.first_name or ""
+    last_initial = f"{actor.last_name[0]}." if actor.last_name else ""
+    name = f"{first} {last_initial}".strip()
+    if name:
+        return name
+    if actor.email:
+        return actor.email.split("@")[0]
+    return actor.username
+
+
 def notify_item_added(item, actor):
-    actor_name = actor.display_name if hasattr(actor, "display_name") and actor.display_name else actor.first_name
+    actor_name = _get_actor_name(actor)
     create_notifications_for_members(
         bucket_list=item.bucket_list,
         notification_type=Notification.TypeChoices.ITEM_ADDED,
-        message=f"{actor_name} added \"{item.title}\" to {item.bucket_list.title}.",
+        message=f"{actor_name} added \"{item.title}\" to {item.bucket_list.title}",
         actor=actor,
         item=item,
     )
 
 
 def notify_item_status_changed(item, actor):
-    actor_name = actor.display_name if hasattr(actor, "display_name") and actor.display_name else actor.username
+    actor_name = _get_actor_name(actor)
 
     if item.status == "locked_in":
         notification_type = Notification.TypeChoices.ITEM_LOCKED_IN
         message = f"\"{item.title}\" has been locked in on {item.bucket_list.title}!"
     elif item.status == "complete":
         notification_type = Notification.TypeChoices.ITEM_COMPLETED
-        message = f"\"{item.title}\" has been completed on {item.bucket_list.title}! 🎉"
+        message = f"\"{item.title}\" has been completed on {item.bucket_list.title}! Let's go! 🎉"
     else:
         return  # proposed — no notification needed
 
@@ -96,7 +108,7 @@ def notify_list_frozen(bucket_list):
     create_notifications_for_members(
         bucket_list=bucket_list,
         notification_type=Notification.TypeChoices.LIST_FROZEN,
-        message=f"Time's up! {bucket_list.title} is now frozen!",
+        message=f"Time's up! {bucket_list.title} is now frozen 🥶",
         exclude_actor=False,  # everyone including owner gets this
     )
 
@@ -112,6 +124,6 @@ def notify_freeze_reminder(bucket_list, hours_remaining):
     create_notifications_for_members(
         bucket_list=bucket_list,
         notification_type=Notification.TypeChoices.FREEZE_REMINDER,
-        message=f"{bucket_list.title} will freeze in {time_str}! Hurry and get your votes in.",
+        message=f"{bucket_list.title} will freeze in {time_str}! Get your votes in",
         exclude_actor=False,
     )
