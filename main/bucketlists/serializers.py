@@ -153,6 +153,7 @@ class BucketListSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "decision_deadline",
+            "decision_deadline_input",
             "start_date",
             "end_date",
             "start_time",
@@ -201,8 +202,34 @@ class BucketListSerializer(serializers.ModelSerializer):
             )
 
         return deadline_dt
+    
+    def get_decision_deadline(self, obj):
+        if not obj.decision_deadline:
+            return None
+        return timezone.localtime(obj.decision_deadline).date().isoformat()
 
     def validate(self, attrs):
+        deadline_date = attrs.pop("decision_deadline_input", serializers.empty)
+
+        if deadline_date is not serializers.empty:
+            if deadline_date is None:
+                attrs["decision_deadline"] = None
+            else:
+                deadline_dt = datetime.combine(deadline_date, time(23, 59, 59))
+
+                if timezone.is_naive(deadline_dt):
+                    deadline_dt = timezone.make_aware(
+                        deadline_dt,
+                        timezone.get_current_timezone()
+                    )
+
+                if deadline_dt <= timezone.now():
+                    raise serializers.ValidationError({
+                        "decision_deadline": "Decision deadline must be in the future."
+                    })
+
+                attrs["decision_deadline"] = deadline_dt
+
         start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
         end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
         start_time = attrs.get("start_time", getattr(self.instance, "start_time", None))
@@ -243,7 +270,7 @@ class BucketListSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         return attrs
-    
+
     @transaction.atomic
     def create(self, validated_data):
         request = self.context["request"]
