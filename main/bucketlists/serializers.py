@@ -2,6 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.conf import settings
 from rest_framework import serializers
+from datetime import datetime, time
 from users.serializers import UserBasicSerializer
 
 from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite, Notification
@@ -133,6 +134,7 @@ class BucketListSerializer(serializers.ModelSerializer):
     owner_email = serializers.EmailField(source="owner.email", read_only=True)
     memberships = BucketListMembershipSerializer(many=True, read_only=True)
     items = BucketListItemSerializer(many=True, read_only=True)
+    decision_deadline = serializers.DateField(required=False, allow_null=True)
     is_frozen = serializers.ReadOnlyField()
     is_date_range = serializers.ReadOnlyField()
     has_time = serializers.ReadOnlyField()
@@ -172,15 +174,29 @@ class BucketListSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        
+
     def validate_decision_deadline(self, value):
-        if value is not None:
-            if value <= timezone.now():
-                raise serializers.ValidationError(
-                    "Decision deadline must be in the future."
-                )
-        return value
-    
+        if value is None:
+            return value
+
+        if isinstance(value, datetime):
+            deadline_dt = value
+        else:
+            deadline_dt = datetime.combine(value, time(23, 59, 59))
+
+        if timezone.is_naive(deadline_dt):
+            deadline_dt = timezone.make_aware(
+                deadline_dt,
+                timezone.get_current_timezone()
+            )
+
+        if deadline_dt <= timezone.now():
+            raise serializers.ValidationError(
+                "Decision deadline must be in the future."
+            )
+
+        return deadline_dt
+
     def validate(self, attrs):
         start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
         end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
