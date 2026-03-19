@@ -400,6 +400,7 @@ class NotificationSerializer(serializers.ModelSerializer):
             "notification_type",
             "message",
             "is_read",
+            "is_dismissed",
             "actor_name",
             "bucket_list_id",
             "bucket_list_title",

@@ -1,4 +1,6 @@
 from django.http import Http404
+from django.utils import timezone
+from datetime import timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
@@ -672,16 +674,18 @@ class NotificationList(APIView):
  
     def get(self, request):
         notifications = Notification.objects.filter(
-            recipient=request.user
+            recipient=request.user,
+            is_dismissed=False,
+            created_at__gte=timezone.now() - timedelta(days=30),
         ).select_related("actor", "bucket_list", "item")
  
         serializer = NotificationSerializer(
             notifications,
             many=True,
             context={"request": request},
-            )
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
- 
+
  
 class NotificationUnreadCount(APIView):
     """
@@ -708,8 +712,11 @@ class NotificationMarkRead(APIView):
  
     def post(self, request):
         mark_all = request.data.get("all", False)
+        dismiss = request.data.get("dismiss", False)
+        notification_id = request.data.get("id")
  
-        if mark_all:
+        # ── Mark all as read ──────────────────────────────────────────────
+        if mark_all and not dismiss:
             Notification.objects.filter(
                 recipient=request.user,
                 is_read=False,
@@ -719,10 +726,21 @@ class NotificationMarkRead(APIView):
                 status=status.HTTP_200_OK,
             )
  
-        notification_id = request.data.get("id")
+        # ── Dismiss all ───────────────────────────────────────────────────
+        if mark_all and dismiss:
+            Notification.objects.filter(
+                recipient=request.user,
+                is_dismissed=False,
+            ).update(is_dismissed=True)
+            return Response(
+                {"detail": "All notifications dismissed."},
+                status=status.HTTP_200_OK,
+            )
+ 
+        # ── Single notification action ────────────────────────────────────
         if not notification_id:
             return Response(
-                {"detail": "Provide either 'id' or 'all: true'."},
+                {"detail": "Provide 'id', or 'all: true'."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
  
@@ -737,9 +755,16 @@ class NotificationMarkRead(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
  
+        if dismiss:
+            notification.is_dismissed = True
+            notification.save(update_fields=["is_dismissed"])
+            return Response(
+                {"detail": "Notification dismissed."},
+                status=status.HTTP_200_OK,
+            )
+ 
         notification.is_read = True
         notification.save(update_fields=["is_read"])
- 
         return Response(
             {"detail": "Notification marked as read."},
             status=status.HTTP_200_OK,
