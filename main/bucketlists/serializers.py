@@ -438,3 +438,6 @@ class NotificationSerializer(serializers.ModelSerializer):
             return None
         vote = obj.item.votes.filter(user=request.user).first()
         return vote.vote_type if vote else None
+
+class BucketListFreezeSerializer(serializers.Serializer):
+    is_frozen = serializers.BooleanField()

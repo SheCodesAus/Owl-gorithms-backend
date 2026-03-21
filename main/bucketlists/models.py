@@ -25,6 +25,7 @@ class BucketList(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_public = models.BooleanField(default=False)
+    is_frozen = models.BooleanField(default=False)
     
     # New scheduling fields
     start_date = models.DateField(null=True, blank=True)
@@ -34,12 +35,6 @@ class BucketList(models.Model):
     
     def __str__(self):
         return self.title
-    
-    @property
-    def is_frozen(self):
-        if not self.decision_deadline:
-            return False
-        return timezone.now() >= self.decision_deadline
     
     @property
     def is_date_range(self):

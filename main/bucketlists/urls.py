@@ -9,6 +9,7 @@ from .views import (
     BucketListInviteDetail,
     BucketListInviteAccept,
     BucketListMembershipDetail,
+    BucketListFreezeToggle,
     NotificationList,
     NotificationUnreadCount,
     NotificationMarkRead
@@ -52,6 +53,12 @@ urlpatterns = [
     "bucketlists/<int:bucket_list_id>/members/<int:membership_id>/",
     BucketListMembershipDetail.as_view(),
     name="bucketlist-membership-detail",
+    ),
+    path(
+        "bucketlists/<int:pk>/freeze/",
+        BucketListFreezeToggle.as_view(),
+        name="bucketlist-freeze-toggle",
+        
     ),
     path("notifications/", NotificationList.as_view(), name="notification-list"),
     path("notifications/unread-count/", NotificationUnreadCount.as_view(), name="notification-unread-count"),

@@ -11,7 +11,6 @@ from .models import BucketListItem, BucketList
 from .notification_services import (
     notify_item_added,
     notify_item_status_changed,
-    notify_list_frozen,
 )
 
 
@@ -54,32 +53,3 @@ def handle_item_saved(sender, instance, created, **kwargs):
 
     if previous_status != instance.status and instance.status in ("locked_in", "complete"):
         notify_item_status_changed(instance, actor)
-
-
-@receiver(pre_save, sender=BucketList)
-def capture_list_frozen_state(sender, instance, **kwargs):
-    """
-    Store whether the list was already frozen before this save.
-    """
-    if instance.pk:
-        try:
-            previous = BucketList.objects.get(pk=instance.pk)
-            _list_previous_frozen[instance.pk] = previous.is_frozen
-        except BucketList.DoesNotExist:
-            pass
-
-
-@receiver(post_save, sender=BucketList)
-def handle_list_saved(sender, instance, created, **kwargs):
-    """
-    Fire list_frozen when a list transitions from not-frozen to frozen.
-    This happens when decision_deadline is set to a past time (or passes).
-    """
-    if created:
-        return
-
-    was_frozen = _list_previous_frozen.pop(instance.pk, False)
-    is_now_frozen = instance.is_frozen
-
-    if not was_frozen and is_now_frozen:
-        notify_list_frozen(instance)

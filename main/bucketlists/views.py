@@ -7,7 +7,7 @@ from rest_framework import status, permissions
 from .notification_services import notify_item_added, notify_item_status_changed
 
 from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite, Notification
-from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer, BucketListInviteSerializer, InviteAcceptSerializer, BucketListMembershipSerializer, BucketListMembershipUpdateSerializer, NotificationSerializer
+from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer, BucketListInviteSerializer, InviteAcceptSerializer, BucketListMembershipSerializer, BucketListMembershipUpdateSerializer, NotificationSerializer, BucketListFreezeSerializer
 
 class BucketListList(APIView):
     """
@@ -837,3 +837,74 @@ class NotificationMarkRead(APIView):
             {"detail": "Notification marked as read."},
             status=status.HTTP_200_OK,
         )
+
+class BucketListFreezeToggle(APIView):
+    """
+    PUT /api/bucketlists/:id/freeze/
+    Owner only. Manually freeze or unfreeze a bucket list.
+ 
+    Body: { "is_frozen": true }  or  { "is_frozen": false }
+ 
+    Freezing:
+      - Sets is_frozen = True
+      - Notifies all members
+ 
+    Unfreezing:
+      - Sets is_frozen = False
+      - Clears decision_deadline so the management command
+        won't auto-refreeze on the next run
+    """
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def get_bucket_list(self, pk, user):
+        try:
+            return BucketList.objects.get(pk=pk, memberships__user=user)
+        except BucketList.DoesNotExist:
+            raise Http404
+ 
+    def put(self, request, pk):
+        bucket_list = self.get_bucket_list(pk, request.user)
+ 
+        if bucket_list.owner != request.user:
+            return Response(
+                {"detail": "Only the owner can freeze or unfreeze this list."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+ 
+        serializer = BucketListFreezeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+ 
+        freeze = serializer.validated_data["is_frozen"]
+        already_in_state = bucket_list.is_frozen == freeze
+ 
+        if already_in_state:
+            return Response(
+                {
+                    "detail": f"List is already {'frozen' if freeze else 'unfrozen'}.",
+                    "is_frozen": bucket_list.is_frozen,
+                },
+                status=status.HTTP_200_OK,
+            )
+ 
+        bucket_list.is_frozen = freeze
+ 
+        if not freeze:
+            # Unfreezing — clear deadline so management command
+            # won't auto-refreeze on next run
+            bucket_list.decision_deadline = None
+ 
+        bucket_list.save(update_fields=["is_frozen", "decision_deadline"])
+ 
+        # Notify all members when freezing
+        if freeze:
+            from .notification_services import notify_list_frozen
+            notify_list_frozen(bucket_list)
+ 
+        response_serializer = BucketListSerializer(
+            bucket_list, context={"request": request}
+        )
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
