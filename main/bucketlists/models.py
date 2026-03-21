@@ -383,3 +383,42 @@ class Notification(models.Model):
     
     def __str__(self):
         return f"[{self.notification_type}] → {self.recipient} — {self.message[:60]}"
+
+class Reaction(models.Model):
+    """
+    A single emoji reaction from one user on one bucket list item.
+    One reaction per user per item — changing reaction replaces the old one.
+    """
+ 
+    REACTION_CHOICES = [
+        ("fire",      "Fire"),
+        ("love",      "Love"),
+        ("sketchy",   "Sketchy"),
+        ("dead",      "Dead"),
+        ("hardpass",  "Hard Pass"),
+        ("nope",      "Nope"),
+    ]
+ 
+    class Meta:
+        # Enforces one reaction per user per item at the database level
+        unique_together = ("user", "item")
+        ordering = ["-created_at"]
+ 
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="reactions",
+    )
+    item = models.ForeignKey(
+        "BucketListItem",
+        on_delete=models.CASCADE,
+        related_name="reactions",
+    )
+    reaction_type = models.CharField(
+        max_length=20,
+        choices=REACTION_CHOICES,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    def __str__(self):
+        return f"{self.user} reacted {self.reaction_type} to '{self.item.title}'"
