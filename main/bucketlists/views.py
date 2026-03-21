@@ -48,135 +48,177 @@ class BucketListList(APIView):
         
 class BucketListDetail(APIView):
     """
-    GET one list (single) + Update/Delete
+    GET  — public lists: anyone (authenticated or not)
+           private lists: members only
+    PUT  — owner only
+    DELETE — owner only
     """
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_object(self, pk, user):
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_object_for_read(self, pk, user):
+        """
+        Returns the bucket list if the user is allowed to read it.
+        - Public list: always allowed.
+        - Private list: must be a member.
+        """
+        try:
+            bucket_list = BucketList.objects.get(pk=pk)
+        except BucketList.DoesNotExist:
+            raise Http404
+
+        if bucket_list.is_public:
+            return bucket_list
+
+        # Private — must be authenticated and a member
+        if not user or not user.is_authenticated:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("This list is private. You must be a member to view it.")
+
+        if not bucket_list.memberships.filter(user=user).exists():
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("This list is private. You must be a member to view it.")
+
+        return bucket_list
+
+    def get_object_for_write(self, pk, user):
+        """Write operations always require membership."""
         try:
             return BucketList.objects.get(pk=pk, memberships__user=user)
         except BucketList.DoesNotExist:
             raise Http404
-        
+
     def is_owner(self, bucket_list, user):
         return bucket_list.owner == user
-    
+
     def get(self, request, pk):
-        bucket_list = self.get_object(pk, request.user)
+        bucket_list = self.get_object_for_read(pk, request.user)
         serializer = BucketListSerializer(bucket_list, context={"request": request})
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-        )
-        
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def put(self, request, pk):
-        bucket_list = self.get_object(pk, request.user)
-        
+        bucket_list = self.get_object_for_write(pk, request.user)
+
         if not self.is_owner(bucket_list, request.user):
             return Response(
                 {"detail": "Only the owner can update this bucket list."},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
-            
+
         serializer = BucketListSerializer(
             bucket_list,
             data=request.data,
             partial=True,
-            context={"request": request}
+            context={"request": request},
         )
-        
+
         if serializer.is_valid():
             serializer.save()
-            return Response(
-                serializer.data,
-                status=status.HTTP_200_OK
-            )
-        
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
-        
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     def delete(self, request, pk):
-        bucket_list = self.get_object(pk, request.user)
-        
+        bucket_list = self.get_object_for_write(pk, request.user)
+
         if not self.is_owner(bucket_list, request.user):
             return Response(
                 {"detail": "Only the owner can delete this bucket list."},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
-            
+
         bucket_list.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
+
 
 class BucketListItemListCreate(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_bucket_list(self, bucket_list_id, user):
+    """
+    GET  — public lists: anyone can read items
+           private lists: members only
+    POST — members with editor/owner role only (list must not be frozen)
+    """
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_bucket_list_for_read(self, bucket_list_id, user):
+        try:
+            bucket_list = BucketList.objects.get(pk=bucket_list_id)
+        except BucketList.DoesNotExist:
+            raise Http404
+
+        if bucket_list.is_public:
+            return bucket_list
+
+        if not user or not user.is_authenticated:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("This list is private.")
+
+        if not bucket_list.memberships.filter(user=user).exists():
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("This list is private.")
+
+        return bucket_list
+
+    def get_bucket_list_for_write(self, bucket_list_id, user):
         try:
             return BucketList.objects.get(
                 pk=bucket_list_id,
-                memberships__user=user
-                )
+                memberships__user=user,
+            )
         except BucketList.DoesNotExist:
             raise Http404
-        
+
     def get_membership(self, bucket_list, user):
         try:
             return BucketListMembership.objects.get(
                 bucket_list=bucket_list,
                 user=user,
-                )
+            )
         except BucketListMembership.DoesNotExist:
             raise Http404
-        
+
     def get(self, request, bucket_list_id):
-        bucket_list = self.get_bucket_list(bucket_list_id, request.user)
+        bucket_list = self.get_bucket_list_for_read(bucket_list_id, request.user)
         items = bucket_list.items.all()
-        serializer = BucketListItemSerializer(items, many=True, context={"request": request})
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-            )
-        
+        serializer = BucketListItemSerializer(
+            items, many=True, context={"request": request}
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def post(self, request, bucket_list_id):
-        bucket_list = self.get_bucket_list(bucket_list_id, request.user)
+        # Write always requires authentication + membership
+        bucket_list = self.get_bucket_list_for_write(bucket_list_id, request.user)
         membership = self.get_membership(bucket_list, request.user)
-        
+
         if bucket_list.is_frozen and request.user != bucket_list.owner:
             return Response(
                 {"detail": "This bucket list is frozen. New items can no longer be added."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-            
+
         if membership.role not in [
             BucketListMembership.RoleChoices.OWNER,
             BucketListMembership.RoleChoices.EDITOR,
         ]:
             return Response(
                 {"detail": "You do not have permission to add items to this bucket list."},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
-            
-        serializer = BucketListItemSerializer(data=request.data, context={"request": request})
-        
+
+        serializer = BucketListItemSerializer(
+            data=request.data, context={"request": request}
+        )
+
         if serializer.is_valid():
             item = serializer.save(
                 bucket_list=bucket_list,
                 created_by=request.user,
             )
             notify_item_added(item, actor=request.user)
-            response_serializer = BucketListItemSerializer(item, context={"request": request})
-            return Response(
-                response_serializer.data,
-                status=status.HTTP_201_CREATED
+            response_serializer = BucketListItemSerializer(
+                item, context={"request": request}
             )
-            
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
 class BucketListItemDetail(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -278,57 +320,85 @@ class BucketListItemDetail(APIView):
         item.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
     
+
 class ItemVoteAction(APIView):
+    """
+    Voting requires authentication.
+    Public list + allow_viewer_voting=True → any authenticated user can vote.
+    Private list → must be a member with appropriate role.
+    """
     permission_classes = [permissions.IsAuthenticated]
-    
+
     def get_item(self, pk, user):
+        """
+        For voting, the item must be on a list the user can access.
+        Public list: any authenticated user.
+        Private list: must be a member.
+        """
         try:
-            return BucketListItem.objects.get(
-                pk=pk,
-                bucket_list__memberships__user=user
-            )
+            item = BucketListItem.objects.select_related("bucket_list").get(pk=pk)
         except BucketListItem.DoesNotExist:
             raise Http404
-        
+
+        bucket_list = item.bucket_list
+
+        if bucket_list.is_public:
+            return item
+
+        # Private — must be a member
+        if not bucket_list.memberships.filter(user=user).exists():
+            raise Http404
+
+        return item
+
     def get_membership(self, bucket_list, user):
+        """Returns membership or None for public list non-members."""
         try:
             return BucketListMembership.objects.get(
                 bucket_list=bucket_list,
                 user=user,
             )
         except BucketListMembership.DoesNotExist:
-            raise Http404
-        
+            return None
+
     def can_vote(self, bucket_list, membership):
         if bucket_list.is_frozen:
             return False
-        
+
+        # Public list with viewer voting enabled — any authenticated user can vote
+        if bucket_list.is_public and bucket_list.allow_viewer_voting:
+            return True
+
+        # Must be a member with the right role
+        if not membership:
+            return False
+
         if membership.role in [
             BucketListMembership.RoleChoices.OWNER,
             BucketListMembership.RoleChoices.EDITOR,
         ]:
             return True
-        
+
         if (
             membership.role == BucketListMembership.RoleChoices.VIEWER
             and bucket_list.allow_viewer_voting
         ):
             return True
-        
+
         return False
-    
+
     def post(self, request, pk):
         item = self.get_item(pk, request.user)
         membership = self.get_membership(item.bucket_list, request.user)
-        
+
         if not self.can_vote(item.bucket_list, membership):
             return Response(
                 {"detail": "You do not have permission to vote."},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
-            
+
         vote_type = request.data.get("vote_type")
-        
+
         if vote_type not in [
             ItemVote.VoteTypeChoices.UPVOTE,
             ItemVote.VoteTypeChoices.DOWNVOTE,
@@ -337,41 +407,39 @@ class ItemVoteAction(APIView):
                 {"detail": "vote_type must be 'upvote' or 'downvote'."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
         vote, created = ItemVote.objects.update_or_create(
             item=item,
             user=request.user,
             defaults={"vote_type": vote_type},
         )
-        
+
         serializer = ItemVoteSerializer(vote, context={"request": request})
-        
         return Response(
             serializer.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
-        
+
     def delete(self, request, pk):
         item = self.get_item(pk, request.user)
         membership = self.get_membership(item.bucket_list, request.user)
-        
+
         if not self.can_vote(item.bucket_list, membership):
             return Response(
                 {"detail": "You cannot remove a vote from this item."},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
-            
+
         try:
             vote = ItemVote.objects.get(item=item, user=request.user)
         except ItemVote.DoesNotExist:
             return Response(
                 {"detail": "You do not have a vote on this item."},
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_404_NOT_FOUND,
             )
-            
+
         vote.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
     
 class BucketListInviteManage(APIView):
     """
