@@ -7,7 +7,7 @@ from rest_framework import status, permissions
 from .notification_services import notify_item_added, notify_item_status_changed
 
 from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite, Notification
-from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer, BucketListInviteSerializer, InviteAcceptSerializer, BucketListMembershipSerializer, BucketListMembershipUpdateSerializer, NotificationSerializer, BucketListFreezeSerializer
+from .serializers import BucketListSerializer, BucketListItemSerializer, ItemVoteSerializer, BucketListInviteSerializer, InviteAcceptSerializer, BucketListMembershipSerializer, BucketListMembershipUpdateSerializer, NotificationSerializer, BucketListFreezeSerializer, Reaction
 
 class BucketListList(APIView):
     """
@@ -909,3 +909,82 @@ class BucketListFreezeToggle(APIView):
             bucket_list, context={"request": request}
         )
         return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+class ItemReactionView(APIView):
+    """
+    POST /api/items/:item_id/react/
+    Body: { "reaction_type": "fire" }
+ 
+    - If the user has no reaction on this item: create it
+    - If the user sends the same reaction they already have: remove it (toggle off)
+    - If the user sends a different reaction: replace the old one
+    - Returns the updated reactions_summary and user_reaction for the item
+    """
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def post(self, request, item_id):
+        try:
+            item = BucketListItem.objects.get(pk=item_id)
+        except BucketListItem.DoesNotExist:
+            return Response(
+                {"detail": "Item not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+ 
+        is_member = item.bucket_list.memberships.filter(
+            user=request.user
+        ).exists()
+        is_owner = item.bucket_list.owner == request.user
+        if not is_member and not is_owner:
+            return Response(
+                {"detail": "You are not a member of this bucket list."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+ 
+        reaction_type = request.data.get("reaction_type")
+        valid_types = [choice[0] for choice in Reaction.REACTION_CHOICES]
+ 
+        if not reaction_type or reaction_type not in valid_types:
+            return Response(
+                {"detail": f"Invalid reaction_type. Choose from: {valid_types}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+ 
+        existing = Reaction.objects.filter(
+            user=request.user,
+            item=item,
+        ).first()
+ 
+        if existing:
+            if existing.reaction_type == reaction_type:
+                # Same reaction — toggle off
+                existing.delete()
+                user_reaction = None
+            else:
+                # Different reaction — replace
+                existing.reaction_type = reaction_type
+                existing.save(update_fields=["reaction_type"])
+                user_reaction = reaction_type
+        else:
+            # No existing reaction — create
+            Reaction.objects.create(
+                user=request.user,
+                item=item,
+                reaction_type=reaction_type,
+            )
+            user_reaction = reaction_type
+ 
+        # Return updated counts
+        counts = {choice[0]: 0 for choice in Reaction.REACTION_CHOICES}
+        for reaction in item.reactions.all():
+            if reaction.reaction_type in counts:
+                counts[reaction.reaction_type] += 1
+ 
+        return Response(
+            {
+                "user_reaction": user_reaction,
+                "reactions_summary": counts,
+            },
+            status=status.HTTP_200_OK,
+        )

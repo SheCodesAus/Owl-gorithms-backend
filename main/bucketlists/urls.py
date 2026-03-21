@@ -12,7 +12,8 @@ from .views import (
     BucketListFreezeToggle,
     NotificationList,
     NotificationUnreadCount,
-    NotificationMarkRead
+    NotificationMarkRead,
+    ItemReactionView,
 )
 
 urlpatterns = [
@@ -63,4 +64,5 @@ urlpatterns = [
     path("notifications/", NotificationList.as_view(), name="notification-list"),
     path("notifications/unread-count/", NotificationUnreadCount.as_view(), name="notification-unread-count"),
     path("notifications/read/", NotificationMarkRead.as_view(), name="notification-mark-read"),
+    path("items/<int:item_id>/react/", ItemReactionView.as_view(), name="item-react"),
 ]

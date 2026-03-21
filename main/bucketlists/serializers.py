@@ -5,7 +5,7 @@ from rest_framework import serializers
 from datetime import datetime, time
 from users.serializers import UserBasicSerializer
 
-from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite, Notification
+from .models import BucketList, BucketListMembership, BucketListItem, ItemVote, BucketListInvite, Notification, Reaction
 
 class BucketListMembershipSerializer(serializers.ModelSerializer):
     user = UserBasicSerializer(read_only=True)
@@ -33,6 +33,8 @@ class BucketListItemSerializer(serializers.ModelSerializer):
     user_vote = serializers.SerializerMethodField()
     is_date_range = serializers.ReadOnlyField()
     has_time = serializers.ReadOnlyField()
+    reactions_summary = serializers.SerializerMethodField()
+    user_reaction = serializers.SerializerMethodField()
     
     class Meta:
         model = BucketListItem
@@ -57,6 +59,8 @@ class BucketListItemSerializer(serializers.ModelSerializer):
             "end_time",
             "is_date_range",
             "has_time",
+            "reactions_summary",
+            "user_reaction",
         ]
         read_only_fields = [
             "id",
@@ -86,6 +90,27 @@ class BucketListItemSerializer(serializers.ModelSerializer):
             return vote.vote_type
         
         return None
+    
+    def get_reaction_summary(self, obj):
+        """
+        Returns a count of each reaction type for this item.
+        """
+        counts = {choice[0]: 0 for choice in Reaction.REACTION_CHOICES}
+        for reaction in obj.reactions.all():
+            if reaction.reaction_type in counts:
+                counts[reaction.reaction_type] += 1
+        return counts
+    
+    def get_user_reaction(self, obj):
+        """
+        Returns current user reaction type, or None.
+        """
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+        reaction = obj.reactions.filter(user=request.user).first()
+        return reaction.reaction_type if reaction else None
+        
     
     def validate(self, attrs):
         start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
