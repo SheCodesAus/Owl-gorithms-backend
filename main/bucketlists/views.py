@@ -766,6 +766,7 @@ class NotificationUnreadCount(APIView):
         count = Notification.objects.filter(
             recipient=request.user,
             is_read=False,
+            is_dismissed=False,
         ).count()
         return Response({"unread_count": count}, status=status.HTTP_200_OK)
  
