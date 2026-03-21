@@ -91,7 +91,7 @@ class BucketListItemSerializer(serializers.ModelSerializer):
         
         return None
     
-    def get_reaction_summary(self, obj):
+    def get_reactions_summary(self, obj):
         """
         Returns a count of each reaction type for this item.
         """
