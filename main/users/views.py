@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from .models import User
 from .serializers import UserSerializer
 import logging
+import os
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -126,6 +127,7 @@ class GoogleLoginCallback(APIView):
     def get(self, request):
         # User should be authenticated by allauth at this point
         user = request.user
+        url = os.environ.get('FRONTEND_URL')
         
         if not user.is_authenticated:
             user_id = request.session.get('_auth_user_id')
@@ -136,7 +138,7 @@ class GoogleLoginCallback(APIView):
                     pass
                 
         if not user or not user.is_authenticated:
-            return redirect("https://kickit-au.netlify.app/login?error=oauth_failed")
+            return redirect(f"{url}/login?error=oauth_failed")
         
         try:
             refresh = RefreshToken.for_user(user)
@@ -144,10 +146,10 @@ class GoogleLoginCallback(APIView):
             refresh_token = str(refresh)
         except Exception as e:
             logger.error(f"Token generation failed for user {user.email}: {e}")
-            return redirect("https://kickit-au.netlify.app/login?error=token_failed")
+            return redirect(f"{url}/login?error=token_failed")
         
         redirect_url = (
-            f"https://kickit-au.netlify.app/oauth/google/callback?"
+            f"{url}/oauth/google/callback?"
             f"access={access_token}&refresh={refresh_token}&login_success=true"
         )
         
