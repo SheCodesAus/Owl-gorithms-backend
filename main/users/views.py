@@ -136,7 +136,7 @@ class GoogleLoginCallback(APIView):
                     pass
                 
         if not user or not user.is_authenticated:
-            return redirect("http://localhost:5173/login?error=oauth_failed")
+            return redirect("https://kickit-au.netlify.app/login?error=oauth_failed")
         
         try:
             refresh = RefreshToken.for_user(user)
@@ -144,10 +144,10 @@ class GoogleLoginCallback(APIView):
             refresh_token = str(refresh)
         except Exception as e:
             logger.error(f"Token generation failed for user {user.email}: {e}")
-            return redirect("http://localhost:5173/login?error=token_failed")
+            return redirect("https://kickit-au.netlify.app/login?error=token_failed")
         
         redirect_url = (
-            f"http://localhost:5173/oauth/google/callback?"
+            f"https://kickit-au.netlify.app/oauth/google/callback?"
             f"access={access_token}&refresh={refresh_token}&login_success=true"
         )
         
